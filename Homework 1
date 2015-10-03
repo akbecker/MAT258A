@@ -1,0 +1,38 @@
+# Alex Beckerman
+# MAT258A
+# Homework 1 Problem 5
+# 10/2/15
+
+Pkg.add("Convex");
+Pkg.add("ECOS");
+using Convex
+using ECOS
+using PyPlot
+
+m = 100;
+n = 30;
+A = rand(m,n);
+b = rand(m,1);
+a1 = 0.5;
+
+x1 = Variable(n,1);
+p1 = minimize(sum_squares(A*x1-b) + 10*norm(x1,1));
+solve!(p1,ECOSSolver());
+y1 = linspace(-2,2,100);
+z1 = 25/2*abs(y1);
+
+x2 = Variable(n,1);
+p2 = minimize(sum_squares(A*x2-b) + .005*norm(x2,2));
+solve!(p2,ECOSSolver());
+y2 = linspace(-2,2,100);
+z2 = 2*y2.^2;
+
+subplot(211)
+plt[:hist](x1.value)
+hold(true)
+plot(y1,z1)
+
+subplot(212)
+plt[:hist](x2.value)
+hold(true)
+plot(y2,z2)
