@@ -1,10 +1,202 @@
 Homework 4
 
+The following sections include:
+* Sections are seperated by a string of "-------"
+1) Problem 1
+2) Problem 4
+
 My write-up
+- Also submitted in class)
 https://drive.google.com/file/d/0B0PtsQs7qYoUX2hjV05RVGVCMEE/view?usp=sharing
 
-Problem 1 Code
-https://drive.google.com/a/ucdavis.edu/file/d/0B0PtsQs7qYoUblVlSk9BRWtkTnc/view?usp=sharing
+PROBLEM 1 ------------------------------------------------------------------------------------------------------------
 
-Problem 4 Code
-https://drive.google.com/file/d/0B0PtsQs7qYoUaTZqRlBlangyY0k/view?usp=sharing
+function newtmin(x0, maxIts = 10, optTol = 1e-5);
+    
+    # Initial position and gradient
+    x = x0;
+    X = Float64[];
+    F = Float64[];
+    d2 = exp(1);
+
+    # Iterate until max iterations hit or gradient has met tolerance
+    for i = 1:maxIts;
+    
+        f = -1/x+d2;
+        g = 1/x^2;  
+  
+        # Evaluate function at next step
+        x = x - f/g; 
+        #x = x*(2 - d2*x); 
+        
+        it = maxIts; 
+        push!(X,x)
+        push!(F,f)
+    end 
+    return (X,F);
+end
+
+x0 = .3;
+
+# Run Newton function
+(X,F) = newtmin(x0);
+X
+plot(X)
+
+PROBLEM 4 ------------------------------------------------------------------------------------------------------------
+
+#Pkg.clone("https://github.com/mpf/Toms566.jl.git")
+#Pkg.add("https://github.com/mpf/Toms566.jl.git")
+#Pkg.test("Toms566")
+
+using Toms566
+using PyPlot
+
+function modify_hessian(H, tol = 10^(-5.0))
+    
+    # Modify Hessian if not positive definite (if H < 0)
+    # - Decompose Hessian into eigenvectors and eigenvalues
+    # - Replace negative eigenvalues with absolute value of eigenvalues
+    # - Eigenvalues below tolerance are set equal to tolerance
+    # - Hessian is composed from new eigenvalues and returned
+    
+    try
+        R = chol(H); # Check for positive definiteness
+    catch
+        (D,V) = eig(H) # Decompose into eigenvalues and eigenvectors
+        
+        # Replace eigenvalues as described above
+        for n = 1:length(D)
+            if abs(D[n]) >= tol
+                D[n] = abs(D[n])
+            else
+                D[n] = tol
+            end
+        end
+        
+        # Recompose Hessian
+        D = diagm(vec(D))
+        H = *(*(V,D),transpose(V))
+    end
+    return(H)
+end
+
+function newtmin(p, x0, solver, maxIts = 1000, optTol = 1e-5);
+    
+    # Inputs
+    # 1. p: Function that evaluates objective value, gradient (maybe Hessian) at point x
+    # 2. x0: Starting point
+    # 3. solver: 1 = Newton, 2 = BSFD
+    # 4. optTol (optional): Gradient tolerance -> |g_end|/|g0|
+    # 5. max_it (optional): Maximum number of iterations
+    
+    # Outputs
+    # 1. x: Minimizer
+    # 2. f: Minimum 
+    # 3. opt: |g_end|/|g0|
+    # 4. it: Number of iterations
+    # 5. F: Vector of "f" as a function of iterations
+    # 6. Opt: Vector of "opt" as a function of iterations
+    
+    # Clear variables 
+    x = Float64[];
+    g0 = Float64[];
+    f = Float64[];
+    g = Float64[];
+    H = Float64[];
+    opt = Float64[];
+    it = Float64[];
+    D = Float64[];
+    V = Float64[]; 
+    n = Float64[];
+    F = Float64[];
+    Opt = Float64[];
+    
+    # Number of states
+    m = size(x0,1);
+    
+    # Initial position and gradient
+    x = x0;
+    g0 = norm(p.grd(x0));
+    
+    # Initial declaration so code will run
+    # - Has no meaning
+    x_old = x; g_old = g0;
+    
+    # Iterate until max iterations hit or gradient has met tolerance
+    for i = 1:maxIts;
+        
+        # Evaluate function and gradient
+        f = p.obj(x); push!(F,f); # Objective value at x
+        g = p.grd(x); # Gradient at x
+        
+        if solver == 1 # If using Newton's Method
+            
+            # Hessian 
+            H = p.hes(x);
+            H = modify_hessian(H); # Modify, if required
+            
+            # Direction
+            d = -H^-1*g;
+            
+        elseif solver == 2 # If using Quasi Newton (BSFD)
+            
+            # Approximate Hessian
+            if i == 1 # Initialize with identity matrix
+                H = eye(m); 
+            else # Use Hessian approximation for all other steps
+                s = x - x_old;
+                y = g - g_old;
+                rho = 1/dot(y,s);
+                H = (eye(m)-rho*s*transpose(y))*H*(eye(m)-rho*y*transpose(s)) + rho*s*transpose(s);
+            end
+            H = modify_hessian(H); # Modify, if required
+            
+            # Direction
+            d = -H*g;  
+            
+        end 
+        
+        # Step size - Armijo backtracking
+        alpha = 1; # Initial step 
+        beta = .5; # Ratio of new step to previous step
+        mu = 10^(-4.0); # Chosen Armijo constant
+        while p.obj(x + d*alpha) > p.obj(x) + alpha*mu*dot(g,d) # Condition that must be met
+            alpha = beta*alpha; # Update step size
+        end
+        
+        # Retain previous objective value and gradient
+        x_old = x;
+        g_old = g;
+        
+        # Evaluate function at next step
+        x = x + alpha*d; 
+        
+        # Check tolerance -> norm of current gradient over initial gradient
+        opt = norm(p.grd(x))/g0; push!(Opt, opt);
+        if opt < optTol;
+            it = i; # If broken, return last iteration number
+            break;
+        end;
+        
+        it = maxIts; 
+    end 
+    return (x,f,opt,it,F,Opt);
+end
+
+# Master
+
+# Options/parameters
+select = 2; # Solver (1 = Newton, 2 = BSFD)
+p = Problem(1); # Problem number
+x0 = p.x0; # Initial condition
+
+# Run Newton function
+(x,f,opt,it,F,Opt) = newtmin(p,x0,select);
+
+# Outputs
+println(x)
+println(f)
+println(opt)
+println(it)
+
