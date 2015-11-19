@@ -1,14 +1,414 @@
 Homework 3
 
-Homework 3 - Problem 1
-https://drive.google.com/file/d/0B0PtsQs7qYoUUTdGQkUxa2NuNzg/view?usp=sharing
+The sections included below are:
+* They are seperated by a string of "----" *
+1) Problem 1
+2) Problem 2 (Newton's method)
+3) Problem 2 (Steepest descent method)
+4) Plotting of problem 2 using Matlab
 
-Homework 3 - Problem 2 (Newton's Method)
-https://drive.google.com/file/d/0B0PtsQs7qYoUb3ZoWi1QaXMyeTQ/view?usp=sharing
+PROBLEM 1 (JULIA) ------------------------------------------------------------------------------------------------
 
-Homework 3 - Problem 2 (Steepest Descent Method)
-https://drive.google.com/file/d/0B0PtsQs7qYoUci1iaHc1aUlqbFU/view?usp=sharing
+#Pkg.clone("https://github.com/mpf/Toms566.jl.git")
+#Pkg.add("https://github.com/mpf/Toms566.jl.git")
+#Pkg.test("Toms566")
 
-Homework 3 - Problem 2 (Plotting using MATLAB)
-- Unfortunately, I could not get Julia to plot, so I used MATLAB instead
-https://drive.google.com/file/d/0B0PtsQs7qYoURTZ5dDJUZWpYUVE/view?usp=sharing
+using Toms566
+using PyPlot
+
+function newtmin(p, x0, maxIts = 1000, optTol = 1e-5);
+    
+    # Clear variables 
+    x = Float64[];
+    g0 = Float64[];
+    f = Float64[];
+    g = Float64[];
+    H = Float64[];
+    opt = Float64[];
+    it = Float64[];
+    D = Float64[];
+    V = Float64[]; 
+    n = Float64[];
+    F = Float64[];
+    Opt = Float64[];
+    
+    # Initial position and gradient
+    x = x0;
+    g0 = norm(p.grd(x0));
+    
+    # Iterate until max iterations hit or gradient has met tolerance
+    for i = 1:maxIts;
+        
+        # Evaluate function, gradient, and Hessian
+        f = p.obj(x); push!(F,f); # Objective value at x
+        g = p.grd(x); # Gradient at x
+        H = p.hes(x); # Hessian at x
+        
+        # Modify Hessian if not positive definite
+        # - Use absolute value of eigenvalues
+        try
+            R = chol(H);
+        catch 
+            (D,V) = eig(H)
+            for n = 1:length(D)
+                if abs(D[n]) >= 10^(-5.0)
+                    D[n] = abs(D[n])
+                else
+                    D[n] = 10^(-5.0)
+                end
+            end
+            D = diagm(vec(D))
+            H = *(*(V,D),transpose(V))
+        end
+        
+        # Search direction
+        d = H\-g; # Newton's method
+        
+        # Step length - Armijo backtracking
+        alpha = 1; # Initial step 
+        beta = .5; # Ratio of new step to previous step
+        mu = 10^(-4.0); # Chosen Armijo constant
+        while p.obj(x + d*alpha) > p.obj(x) + alpha*mu*dot(g,d) # Condition that must be met
+            alpha = beta*alpha; # Update step size
+        end
+        
+        # Evaluate function at next step
+        x = x + alpha*d; 
+        
+        # Check tolerance -> norm of current gradient over initial gradient
+        opt = norm(g)/g0; push!(Opt, opt);
+        if opt < optTol;
+            it = i;
+            break;
+        end;
+        it = maxIts;
+        
+    end 
+    return (x,f,opt,it,F,Opt);
+end
+
+p = Problem(18);
+x0 = p.x0;
+
+(x,f,opt,it,F,Opt) = newtmin(p,x0);
+
+println(x)
+println(f)
+println(opt)
+println(it)
+
+plot(F)
+title("Evaluation of Function")
+xlabel(L"Iteration ($k$)")
+ylabel(L"$f(x_k)$");
+
+plot(Opt); hold(true)
+plot([0,14],[10^-5.0,10^-5.0])
+title("Stopping Criteria")
+xlabel(L"Iteration ($k$)")
+ylabel(L"$\frac{|\nabla f(x_k)|}{|\nabla f(x_0)|}$")
+legend(["Actual","Threshold"])
+
+
+PROBLEM 2 (NEWTON'S METHOD)  (JULIA) -----------------------------------------------------------------------------
+
+# Initiate various packages, etc
+
+# Add packages
+#Pkg.update(); 
+#Pkg.add("ForwardDiff")
+
+# Using 
+using ForwardDiff
+
+# Admissions data
+#download("http://www.ats.ucla.edu/stat/data/binary.csv", "binary.csv");
+A = convert(Array{Float64,2},readcsv("binary.csv")[2:end,:][:,1:3]);
+
+# Evaluate function, gradient, and Hessian
+
+# Function
+function L(x,u)
+    a = x[1:2]; β = x[3];
+    uᵢ = u[2:3]; yᵢ = u[1]
+    return -yᵢ*(vecdot(a,uᵢ) + β) + log(1 + exp(vecdot(a,uᵢ) + β))
+end;
+L(x) = sum([L(x, A[i,:]) for i in 1:m])
+
+# Gradient
+g(x,ui) = ForwardDiff.gradient(x -> L(x,ui))(x)
+m = size(A,1)
+g(x) = sum([g(x, A[i,:]) for i in 1:m]);
+
+# Hessian
+H(x,ui) = ForwardDiff.hessian(x -> L(x,ui))(x)
+H(x) = sum([H(x, A[i,:]) for i in 1:m])
+
+# Newton's Method 
+
+function newtmin(x0, it_max = 10000, optTol = 1e-6)
+    # Minimize a function f using Newton's method.
+        
+    # Inputs
+    # 1. obj: A function that evaluates the objective value, gradient, and Hessian at point x
+    # 2. x0: Starting point
+    # 3. optTol (optional): Gradient tolerance
+    # 4. max_it (optional): Maximum number of iterations
+    
+    # Outputs
+    # 1. xmin: Minimizer
+    # 2. fmin: Minimum 
+    # 3. it: Number of iterations
+    
+    # Number of states
+    n = size(x0,1);
+    
+    # Preallocate space
+    x = zeros(n,it_max+1); # Independent variable
+    fx = zeros(1,it_max+1); # Objective value
+    
+    # Starting point
+    x[:,1] = x0; # Independent variable
+    fx[1] = L(x[:,1]); # Objective value
+    gx = g(x[:,1]); # Gradient
+    Hx = H(x[:,1]); # Hessian
+    
+    # Choose tolerance based on initial gradient
+    tol = optTol*norm(gx);
+
+    # Iterate while following conditions are met:
+    # 1. Gradient is above certain threshold
+    # 2. Maximum number of iterations not met
+    k = 1; # Begin iteration counter
+    while norm(gx) > tol && k <= it_max
+        
+        # Check Hessian for positive definiteness
+        # - If not, modify Hessian
+        try
+            R = chol(Hx);
+        catch 
+            # D: Eigen values
+            # V = Eigen vectors
+            (D,V) = eig(Hx)
+            for i in 1:1:length(D)
+                if abs(D[i]) >= 10^(-5.0)
+                    D[i] = abs(D[i])
+                else
+                    D[i] = 10^(-5.0)
+                end
+            end
+            D = diagm(vec(D))
+            Hx = *(*(V,D),transpose(V))
+        end
+        
+        # Search direction
+        dx = Hx\-(gx);
+        
+        #Armijo backtracking
+        alpha = 1; # Initial step 
+        beta = .5; # Ratio of new step to previous step
+        mu = 10^(-4.0); # Chosen Armijo constant
+        while L(x[:,k] + dx*alpha) > (L(x[:,k]) + alpha*mu*dot(gx,dx))
+            alpha = beta*alpha; # Update step size
+        end
+        
+        # Check second, third, ...., point
+        x[:,k+1] = x[:,k] + alpha*dx; # Independent variable
+        fx[k+1] = L(x[:,k+1]); # Objective value
+        gx = g(x[:,k+1]); # Gradient
+        Hx = H(x[:,k+1]); # Hessian
+        
+        # Increase counter
+        k += 1;
+    
+    end
+    
+    # Collect data at end of iterations
+    xmin = x[:,k]; # Minimizer
+    fmin = fx[k]; # Minimum
+    it = k; # Number of iterations
+    
+    # Return values
+    return(xmin, fmin, it)
+    
+end
+
+    
+# Initial guess
+x0 = zeros(3,1);
+    
+# Call Newton method function
+(xmin,fmin,it) = newtmin(x0);
+    
+# Print outputs
+println("Minimizer")
+println(xmin[:])
+println("\nMinimum")
+println(fmin)
+println("\nNumber of Iterations")
+println(it)
+
+PROBLEM 2 (STEEPEST DESCENT METHOD)  (JULIA) --------------------------------------------------------------------------
+
+# Initiate various packages, etc
+
+# Add packages
+#Pkg.update(); 
+#Pkg.add("ForwardDiff")
+
+# Using 
+using ForwardDiff
+
+# Admissions data
+#download("http://www.ats.ucla.edu/stat/data/binary.csv", "binary.csv");
+A = convert(Array{Float64,2},readcsv("binary.csv")[2:end,:][:,1:3]);
+
+# Evaluate function and gradient
+
+# Function
+function L(x,u)
+    a = x[1:2]; β = x[3];
+    uᵢ = u[2:3]; yᵢ = u[1]
+    return -yᵢ*(vecdot(a,uᵢ) + β) + log(1 + exp(vecdot(a,uᵢ) + β))
+end;
+L(x) = sum([L(x, A[i,:]) for i in 1:m])
+
+# Gradient
+g(x,ui) = ForwardDiff.gradient(x -> L(x,ui))(x)
+m = size(A,1)
+g(x) = sum([g(x, A[i,:]) for i in 1:m]);
+
+# Evaluate step for steepest descent
+
+alpha = 1 / maximum(svd(A[2:end,:]'*A[2:end,:])[2]);
+
+# Steepest descent method
+
+function steepest_descent(x0, it_max = 10000, optTol = 1e-6)
+    # Minimize a function f using Newton's method.
+        
+    # Inputs
+    # 1. obj: A function that evaluates the objective value, gradient, and Hessian at point x
+    # 2. x0: Starting point
+    # 3. optTol (optional): Gradient tolerance
+    # 4. max_it (optional): Maximum number of iterations
+    
+    # Outputs
+    # 1. xmin: Minimizer
+    # 2. fmin: Minimum 
+    # 3. it: Number of iterations
+    
+    # Number of states
+    n = size(x0,1);
+    
+    # Preallocate space
+    x = zeros(n,it_max+1); # Independent variable
+    fx = zeros(1,it_max+1); # Objective value
+    
+    # Starting point
+    x[:,1] = x0; # Independent variable
+    fx[1] = L(x[:,1]); # Objective value
+    gx = g(x[:,1]); # Gradient
+    
+    # Choose tolerance based on initial gradient
+    tol = optTol*norm(gx);
+
+    # Iterate while following conditions are met:
+    # 1. Gradient is above certain threshold
+    # 2. Maximum number of iterations not met
+    k = 1; # Begin iteration counter
+    while norm(gx) > tol && k <= it_max
+        
+        # Check second, third, ...., point
+        x[:,k+1] = x[:,k] - alpha*gx; # Independent variable
+        fx[k+1] = L(x[:,k+1]); # Objective value
+        gx = g(x[:,k+1]); # Gradient
+        
+        # Increase counter
+        k += 1;
+    
+    end
+    
+    # Collect data at end of iterations
+    xmin = x[:,k]; # Minimizer
+    fmin = fx[k]; # Minimum
+    it = k; # Number of iterations
+    
+    # Return values
+    return(xmin, fmin, it)
+    
+end
+
+# Master file
+    
+# Initial guess
+x0 = zeros(3,1);
+x0 = [0.003, 0.8, -5]
+    
+# Call Newton method function
+(xmin,fmin,it) = steepest_descent(x0);
+    
+# Print outputs
+println("Minimizer")
+println(xmin[:])
+println("\nMinimum")
+println(fmin)
+println("\nNumber of Iterations")
+println(it)
+
+PROBLEM 2 PLOTTING FUNCTION (MATLAB)---------------------------------------------------------------------------------
+
+clc
+clear all
+clear home
+
+% Load data
+load binary.mat
+
+% Raw data - Admitted versus not admitted
+num1 = num(num(:,1) == 1,:); % Admitted
+num0 = num(num(:,1) == 0,:); % Not admitted
+
+% GRE scores
+GRE1 = num1(:,2); % Admitted
+GRE0 = num0(:,2); % Not admitted
+
+% GPA scores
+GPA1 = num1(:,3); % Admitted
+GPA0 = num0(:,3); % Not admitted
+
+% Best fit - Steepest descent method
+a1_sd = 0.0025206101749673236;
+a2_sd = 0.7999277710848811;
+beta_sd = -5.000014744869171;
+
+% Regression line - Steepest descent method
+intercept_sd = -beta_sd/a2_sd;
+slope_sd = -a1_sd/a2_sd;
+y_sd = linspace(400,900,500);
+g_sd =  intercept_sd + slope_sd*y_sd;
+
+% Best fit - Newton's method
+a1_newt = 0.00269068;
+a2_newt = 0.754686;
+beta_newt = -4.94937;
+
+% Regression line - Newton's method
+intercept_newt = -beta_newt/a2_newt;
+slope_newt = -a1_newt/a2_newt;
+y_newt = linspace(400,900,500);
+g_newt =  intercept_newt + slope_newt*y_newt;
+
+% Plot 
+plot(GRE1,GPA1,'r+')
+hold on
+plot(GRE0,GPA0,'ko')
+plot(y_sd,g_sd,'linewidth',3)
+plot(y_newt,g_newt,'linewidth',3)
+%axis([min(num(:,2)),max(num(:,2)),min(num(:,3)),max(num(:,3))])
+legend('Admitted','Not Admitted','Steepest Descent','Newton''s Method')
+xlabel('GRE Score')
+ylabel('GPA Score')
+title('Admittance')
+
+
