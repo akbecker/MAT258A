@@ -2,8 +2,471 @@ Homework 5
 
 Exercise 4
 
-Matlab file - Newton's Method
-https://drive.google.com/file/d/0B0PtsQs7qYoUUWRlS2ZBamcyeEk/view?usp=sharing
+Included sections are shown below:
+* sections are seperated by a string of "------"
+1) Newton's method function file - solves the optimization problem
+2) Quasi Newton's method function file - solves the optimization problem
+3) Master - runs the optimization the optimizations
+4) Equatiod development - gradients and hessians for each problem are symbolically made and sent to function files
+5) Problem 6 - contains gradients, hessians, etc, for problem
+6) Problem 7 -            "               "
+7) Problem 8 -            "               "
+8) Problem 9 -            "               "
 
-Matlab file - Quasi-Newton's Method
-https://drive.google.com/file/d/0B0PtsQs7qYoUNVk2QlNVLTkxNEE/view?usp=sharing
+NEWTON'S METHOD FUNCTION---------------------------------------------------------------------------------
+
+function [xmin,fmin,it_tot] = constrained_newton(x0,y0,filename,varargin)
+% Optimization w/ equality constraints and Newtin's method, including
+% Hessian modification
+% Inputs:
+% - x0: initial condition - states
+% - y0: initial condition - lagrange multivariable
+% - filename: location of all equations
+% - (optional) it_max: Maximum iterations (each loop)
+% - (optional) optTol: Gradient tolerance - g/g0 (inner loop)
+% - (optional) rho_times: rho(k+1) = rho_times*rho(k)
+% - (optional) eps: KKT condition tolerance
+% Outputs:
+% - xmin: minimizer
+% - fmin: minimum
+% - it_tot: total number of iterations for inner and outer loop
+
+% Optional inputs
+% - Use defaults if user does not specify
+it_max = 1000;
+optTol = 1E-6;
+rho_times = 10;
+eps = 10^-3;
+if length(varargin) >= 1
+    it_max = varargin{1};
+elseif length(varargin) >= 2
+    optTol = varargin{2};
+elseif length(varargin) >= 3
+    rho_times = varargin{3};
+elseif length(varargin) >= 4
+    eps = varargin{4};
+end
+
+% Initial values
+rho = 1; % Initial penalization, rho(0)
+x = x0; % Initial minimizer guess, x(0)
+y = y0; % Initial lagrange multiplier guess, y(0))
+it_tot = 0; % Total number of iterations (inner and outer loop)
+
+% Outer loop
+% (x*,y*) = argmin L(x,y) = argmin f(x) - y'*c(x) + rho/2*norm(c(x))^2
+for k_outter = 1:it_max
+    
+    % Tolerance for minimization of inner loop
+    eval(['[fx,cx,Lx,dLx,d2Lx] = ' filename '(x,rho,y);'])
+    tolk = optTol*norm(dLx);
+    
+    % Inner loop
+    % xk = argmin L(x,yk) = argmin f(x) - y(k)'*c(x) +
+    % rho(k)/2*norm(c(x))^2
+    for k_inner = 1:it_max
+        
+        % Hessian modification
+        % - Modify if not positive definite
+        % - Make all eigenvalues positive and greater than eps
+        try
+            chol(d2Lx);
+        catch
+            [v,d] = eig(d2Lx);
+            for i = 1:length(d)
+                if abs(d(i,i)) > 10^(-5.0);
+                    d(i,i) = abs(d(i,i));
+                else
+                    d(i,i) = 10^(-5.0);
+                end
+            end
+            d2Lx = v*d*v'; % Modified hessian
+        end
+        
+        % Step direction
+        dx = d2Lx\-(dLx);
+        
+        % Step length
+        alpha = 1;
+        beta = 0.5;
+        mu = 10^(-4.0);
+        while true
+            eval(['[~,~,Lx_new,~,~] = ' filename '(x+dx*alpha,rho,y);'])
+            if Lx_new < Lx + alpha*mu*dot(dLx,dx)
+                break
+            end
+            alpha = beta*alpha;
+        end
+        
+        % Update x
+        x = x + alpha*dx;
+        
+        % Calculate
+        eval(['[fx,cx,Lx,dLx,d2Lx] = ' filename '(x,rho,y);'])
+        if norm(dLx) < tolk
+            break
+        end
+        
+    end
+    
+    % Increase counter
+    it_tot = it_tot + k_inner;
+    
+    % Check KKT conditions
+    if  norm(dLx) < eps && norm(cx) < eps
+        break
+    end
+    
+    % Update lagrange multipliers and rho
+    y = y - rho*cx;
+    rho = rho*rho_times;
+    
+end
+
+% Final outputs (see above)
+xmin = x;
+fmin = fx;
+
+QUASI NEWTON'S METHOD FUNCTION ---------------------------------------------------------------------------
+
+function [xmin,fmin,it_tot] = constrained_quasi_newton(x0,y0,filename,varargin)
+% Optimization w/ equality constraints and Newtin's method, including
+% Hessian modification
+% Inputs:
+% - x0: initial condition - states
+% - y0: initial condition - lagrange multivariable
+% - filename: location of all equations
+% - (optional) it_max: Maximum iterations (each loop)
+% - (optional) optTol: Gradient tolerance - g/g0 (inner loop)
+% - (optional) rho_times: rho(k+1) = rho_times*rho(k)
+% - (optional) eps: KKT condition tolerance
+% Outputs:
+% - xmin: minimizer
+% - fmin: minimum
+% - it_tot: total number of iterations for inner and outer loop
+
+% Optional inputs
+% - Use defaults if user does not specify
+it_max = 1000;
+optTol = 1E-6;
+rho_times = 10;
+eps = 10^-3;
+if length(varargin) >= 1
+    it_max = varargin{1};
+elseif length(varargin) >= 2
+    optTol = varargin{2};
+elseif length(varargin) >= 3
+    rho_times = varargin{3};
+elseif length(varargin) >= 4
+    eps = varargin{4};
+end
+
+% Initial values
+rho = 1; % Initial penalization, rho(0)
+x = x0; % Initial minimizer guess, x(0)
+y = y0; % Initial lagrange multiplier guess, y(0))
+it_tot = 0; % Total number of iterations (inner and outer loop)
+
+m = max(size(x0));
+
+% Outer loop
+% (x*,y*) = argmin L(x,y) = argmin f(x) - y'*c(x) + rho/2*norm(c(x))^2
+for k_outter = 1:it_max
+    
+    % Tolerance for minimization of inner loop
+    eval(['[fx,cx,Lx,dLx,~] = ' filename '(x,rho,y);'])
+    tolk = optTol*norm(dLx);
+    
+    % Inner loop
+    % xk = argmin L(x,yk) = argmin f(x) - y(k)'*c(x) +
+    % rho(k)/2*norm(c(x))^2
+    for k_inner = 1:it_max
+        
+        eval(['[fx,cx,Lx,dLx,~] = ' filename '(x,rho,y);'])
+        
+        % Approximate Hessian
+        if k_inner == 1
+            d2Lx = eye(m);
+        else
+            s = x - x_old;
+            y2 = dLx - dLx_old;
+            rho2 = 1/dot(y2,s);
+            d2Lx = (eye(m)-rho2*s*y2')*d2Lx*(eye(m)-rho2*y2*s') + rho2*(s*s');
+        end
+        
+        % Hessian modification
+        % - Modify if not positive definite
+        % - Make all eigenvalues positive and greater than eps
+        try
+            chol(d2Lx);
+        catch
+            [v,d] = eig(d2Lx);
+            for i = 1:length(d)
+                if abs(d(i,i)) > 10^(-5.0);
+                    d(i,i) = abs(d(i,i));
+                else
+                    d(i,i) = 10^(-5.0);
+                end
+            end
+            d2Lx = v*d*v'; % Modified hessian
+        end
+        
+        % Step direction
+        dx = -d2Lx*dLx;
+        
+        % Step length
+        alpha = 1;
+        beta = 0.5;
+        mu = 10^(-4.0);
+        while true
+            eval(['[~,~,Lx_new,~,~] = ' filename '(x+dx*alpha,rho,y);'])
+            if Lx_new < Lx + alpha*mu*dot(dLx,dx)
+                break
+            end
+            alpha = beta*alpha;
+            if alpha < 10^-5
+                break
+            end
+        end
+        
+        % Save old x and g
+        x_old = x;
+        dLx_old = dLx;
+        
+        % Update x
+        x = x + alpha*dx;
+        
+        % Calculate
+        eval(['[fx,cx,Lx,dLx,~] = ' filename '(x,rho,y);'])
+        if norm(dLx) < tolk
+            break
+        end
+        
+    end
+    
+    % Increase counter
+    it_tot = it_tot + k_inner;
+    
+    % Check KKT conditions
+    if  norm(dLx) < eps && norm(cx) < eps
+        break
+    end
+    
+    % Update lagrange multipliers and rho
+    y = y - rho*cx;
+    rho = rho*rho_times;
+    
+end
+
+% Final outputs (see above)
+xmin = x;
+fmin = fx;
+
+MASTER ----------------------------------------------------------------------------------------------------
+
+clc
+clear all
+clear home
+
+% Initial conditions
+x0 = [1;10]; % Minimizers
+y0 = [0;0]; % Lagrange multipliers (must be size of constraints)
+y0 = 0;
+
+% Constrained optimization
+[xmin,fmin,it_tot] = constrained_quasi_newton(x0,y0,'p6');
+%[xmin,fmin,it_tot] = constrained_newton(x0,y0,'p6');
+
+% Outputs
+fprintf('x1_min: %f \n',xmin(1))
+fprintf('x2_min: %f \n',xmin(2))
+fprintf('fmin: %f \n',fmin)
+fprintf('it_tot: %d \n\n',it_tot)
+
+EQUATION DEVELOPMENT --------------------------------------------------------------------------------------
+
+clc
+clear all
+clear home
+
+% Symbolic values
+syms x1 x2 rho y y1 y2 real
+
+% Objective function and constraint
+if problem == 6
+    fx = (1-x1)^2;
+    cx = 10*(x2-x1^2); cx = cx(:);
+elseif problem == 7
+    fx = (log(1+x1^2)-x2);
+    cx = (1+x1^2)^2+x2^2-4; cx = cx(:);
+elseif problem == 8
+    y = [y1; y2];
+    fx = -1;
+    cx = [x1^2+x2^2-25; x1*x2-9];
+elseif problem == 9
+    fx = sin(pi*x1/12)*cos(pi*x2/16);
+    cx = 4*x1-3*x2; cx = cx(:);
+end
+
+% Augmented Lagrangian
+Lx = (fx - y'*cx + rho/2*norm(cx)^2);
+dLx = jacobian(Lx,[x1;x2]); dLx = dLx(:);
+d2Lx = jacobian(dLx,[x1;x2]);
+
+% Send info to matlabFunction file
+% - SELECT FILENAME APPROPRIATE FOR PROBLEM
+matlabFunction(fx,cx,Lx,dLx,d2Lx,'file','p9','Vars',{[x1;x2],rho,y});
+
+PROBLEM 6----------- --------------------------------------------------------------------------------------
+
+function [fx,cx,Lx,dLx,d2Lx] = p6(in1,rho,y)
+%P6
+%    [FX,CX,LX,DLX,D2LX] = P6(IN1,RHO,Y)
+
+%    This function was generated by the Symbolic Math Toolbox version 6.1.
+%    14-Nov-2015 18:48:44
+
+x1 = in1(1,:);
+x2 = in1(2,:);
+t2 = x1-1.0;
+t3 = t2.^2;
+fx = t3;
+if nargout > 1
+    t4 = x2.*1.0e1;
+    t5 = x1.^2;
+    t7 = t5.*1.0e1;
+    t6 = t4-t7;
+    cx = t6;
+end
+if nargout > 2
+    Lx = t3-t6.*y+rho.*t6.^2.*(1.0./2.0);
+end
+if nargout > 3
+    dLx = [x1.*2.0+x1.*y.*2.0e1-rho.*t6.*x1.*2.0e1-2.0;y.*-1.0e1-rho.*(t5.*2.0e2-x2.*2.0e2).*(1.0./2.0)];
+end
+if nargout > 4
+    d2Lx = reshape([y.*2.0e1+rho.*t5.*4.0e2-rho.*t6.*2.0e1+2.0,rho.*x1.*-2.0e2,rho.*x1.*-2.0e2,rho.*1.0e2],[2, 2]);
+end
+
+PROBLEM 7----------- --------------------------------------------------------------------------------------
+
+function [fx,cx,Lx,dLx,d2Lx] = p7(in1,rho,y)
+%P7
+%    [FX,CX,LX,DLX,D2LX] = P7(IN1,RHO,Y)
+
+%    This function was generated by the Symbolic Math Toolbox version 6.1.
+%    14-Nov-2015 18:50:58
+
+x1 = in1(1,:);
+x2 = in1(2,:);
+t2 = x1.^2;
+t3 = t2+1.0;
+t4 = log(t3);
+fx = t4-x2;
+if nargout > 1
+    t5 = t3.^2;
+    t6 = x2.^2;
+    t7 = t5+t6-4.0;
+    cx = t7;
+end
+if nargout > 2
+    Lx = t4-x2-t7.*y+rho.*t7.^2.*(1.0./2.0);
+end
+if nargout > 3
+    t8 = 1.0./t3;
+    dLx = [t8.*x1.*2.0-t3.*x1.*y.*4.0+rho.*t3.*t7.*x1.*4.0;x2.*y.*-2.0+rho.*t7.*x2.*2.0-1.0];
+end
+if nargout > 4
+    t9 = rho.*t3.*x1.*x2.*8.0;
+    d2Lx = reshape([t8.*2.0-t2.*y.*8.0-t3.*y.*4.0-t2.*1.0./t3.^2.*4.0+rho.*t2.*t5.*1.6e1+rho.*t2.*t7.*8.0+rho.*t3.*t7.*4.0,t9,t9,y.*-2.0+rho.*t6.*4.0+rho.*t7.*2.0],[2, 2]);
+end
+
+PROBLEM 8----------- --------------------------------------------------------------------------------------
+
+function [fx,cx,Lx,dLx,d2Lx] = p8(in1,rho,in3)
+%P8
+%    [FX,CX,LX,DLX,D2LX] = P8(IN1,RHO,IN3)
+
+%    This function was generated by the Symbolic Math Toolbox version 6.1.
+%    14-Nov-2015 18:53:08
+
+x1 = in1(1,:);
+x2 = in1(2,:);
+y1 = in3(1,:);
+y2 = in3(2,:);
+fx = -1.0;
+if nargout > 1
+    t2 = x1.*x2;
+    t3 = t2-9.0;
+    t4 = abs(t3);
+    t5 = x1.^2;
+    t6 = x2.^2;
+    t7 = t5+t6-2.5e1;
+    cx = [t7;t3];
+end
+if nargout > 2
+    t8 = abs(t7);
+    Lx = -t3.*y2-t7.*y1+rho.*(t4.^2+t8.^2).*(1.0./2.0)-1.0;
+end
+if nargout > 3
+    t9 = sign(t3);
+    t10 = sign(t7);
+    dLx = [x1.*y1.*-2.0-x2.*y2+rho.*(t4.*t9.*x2.*2.0+t8.*t10.*x1.*4.0).*(1.0./2.0);-x1.*y2-x2.*y1.*2.0+rho.*(t4.*t9.*x1.*2.0+t8.*t10.*x2.*4.0).*(1.0./2.0)];
+end
+if nargout > 4
+    t11 = t10.^2;
+    t12 = t9.^2;
+    t13 = dirac(t7);
+    t14 = dirac(t3);
+    t15 = t4.*t9.*2.0;
+    t16 = t11.*x1.*x2.*8.0;
+    t17 = t12.*x1.*x2.*2.0;
+    t18 = t8.*t13.*x1.*x2.*1.6e1;
+    t19 = t4.*t14.*x1.*x2.*4.0;
+    t20 = t15+t16+t17+t18+t19;
+    t21 = rho.*t20.*(1.0./2.0);
+    t22 = t21-y2;
+    t23 = t8.*t10.*4.0;
+    d2Lx = reshape([y1.*-2.0+rho.*(t23+t5.*t11.*8.0+t6.*t12.*2.0+t4.*t6.*t14.*4.0+t5.*t8.*t13.*1.6e1).*(1.0./2.0),t22,t22,y1.*-2.0+rho.*(t23+t5.*t12.*2.0+t6.*t11.*8.0+t4.*t5.*t14.*4.0+t6.*t8.*t13.*1.6e1).*(1.0./2.0)],[2, 2]);
+end
+
+PROBLEM 9----------- --------------------------------------------------------------------------------------
+
+function [fx,cx,Lx,dLx,d2Lx] = p9(in1,rho,y)
+%P9
+%    [FX,CX,LX,DLX,D2LX] = P9(IN1,RHO,Y)
+
+%    This function was generated by the Symbolic Math Toolbox version 6.1.
+%    14-Nov-2015 18:54:52
+
+x1 = in1(1,:);
+x2 = in1(2,:);
+t2 = pi.*x2.*(1.0./1.6e1);
+t3 = cos(t2);
+t4 = pi.*x1.*(1.0./1.2e1);
+t5 = sin(t4);
+t6 = t3.*t5;
+fx = t6;
+if nargout > 1
+    t7 = x1.*4.0;
+    t10 = x2.*3.0;
+    t8 = t7-t10;
+    cx = t8;
+end
+if nargout > 2
+    t9 = abs(t8);
+    Lx = t6-t8.*y+rho.*t9.^2.*(1.0./2.0);
+end
+if nargout > 3
+    t11 = sign(t8);
+    t12 = t11.^2;
+    t13 = pi.^2;
+    t14 = cos(t4);
+    t15 = sin(t2);
+    dLx = [y.*-4.0+pi.*t3.*t14.*(1.0./1.2e1)+rho.*t9.*t11.*4.0;y.*3.0-pi.*t5.*t15.*(1.0./1.6e1)-rho.*t9.*t11.*3.0];
+end
+if nargout > 4
+    t16 = dirac(t8);
+    t17 = rho.*t12.*-1.2e1-rho.*t9.*t16.*2.4e1-t13.*t14.*t15.*(1.0./1.92e2);
+    d2Lx = reshape([rho.*t12.*1.6e1+rho.*t9.*t16.*3.2e1-t3.*t5.*t13.*(1.0./1.44e2),t17,t17,rho.*t12.*9.0+rho.*t9.*t16.*1.8e1-t3.*t5.*t13.*(1.0./2.56e2)],[2, 2]);
+end
