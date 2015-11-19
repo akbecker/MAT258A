@@ -2,13 +2,15 @@ Homework 5
 
 Exercise 4
 
+Note: All programming for this homework assignment was done in Matlab
+
 Included sections are shown below:
 * sections are seperated by a string of "------"
 1) Newton's method function file - solves the optimization problem
 2) Quasi Newton's method function file - solves the optimization problem
 3) Master - runs the optimization the optimizations
 4) Equatiod development - gradients and hessians for each problem are symbolically made and sent to function files
-5) Problem 6 - contains gradients, hessians, etc, for problem
+5) Problem 6 - contains gradients, hessians, etc, for problem (produced by Maltab)
 6) Problem 7 -            "               "
 7) Problem 8 -            "               "
 8) Problem 9 -            "               "
